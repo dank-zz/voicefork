@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+*.spec
+.pytest_cache/
+
+# local data (models and voices live in ~/.voicefork, never in the repo)
+*.pth
+*.index
+*.wav
+*.flac
+crash-log.txt
