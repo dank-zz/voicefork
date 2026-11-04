@@ -43,6 +43,7 @@ QFrame#hr {{ background: #222428; max-height: 1px; min-height: 1px; border: none
 QFrame#footer {{ border-top: 1px solid #222428; }}
 QFrame#segbox {{ background: {SURFACE}; border: 1px solid #25272c; border-radius: 7px; }}
 QPushButton#route {{ text-align: left; padding: 9px 12px; background: {SURFACE}; border-color: #25272c; border-radius: 8px; }}
+QPushButton#update {{ text-align: left; padding: 9px 12px; color: {INK}; background: {RAISED}; border-color: #34363c; border-radius: 8px; }}
 QPushButton#setup {{ text-align: left; padding: 9px 12px; color: {ON_AIR}; background: #1c1312; border-color: #3a2321; border-radius: 8px; }}
 QScrollBar:vertical {{ background: transparent; width: 8px; margin: 2px; }}
 QScrollBar::handle:vertical {{ background: #3a3c42; border-radius: 3px; min-height: 24px; }}
@@ -351,6 +352,24 @@ class MainWindow(QMainWindow):
         self.setup_btn.clicked.connect(lambda: self._open_cable_setup())
         self.setup_btn.hide()
         lay.addWidget(self.setup_btn)
+        # "new version" bar, filled in by _check_updates() a moment after start
+        self.update_row = QWidget()
+        ur = QHBoxLayout(self.update_row)
+        ur.setContentsMargins(0, 0, 0, 0)
+        ur.setSpacing(6)
+        self.update_btn = QPushButton()
+        self.update_btn.setObjectName("update")
+        ur.addWidget(self.update_btn, 1)
+        skip = QPushButton("✕")
+        skip.setObjectName("update")
+        skip.setToolTip("Hide until the next version")
+        skip.setFixedWidth(36)
+        skip.clicked.connect(self._skip_update)
+        ur.addWidget(skip)
+        self.update_row.hide()
+        self.update_url = ""
+        self.update_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(self.update_url)))
+        lay.addWidget(self.update_row)
         self.dev_panel = QWidget()
         form = QFormLayout(self.dev_panel)
         form.setContentsMargins(0, 0, 0, 0)
@@ -471,6 +490,47 @@ class MainWindow(QMainWindow):
         self._load_hotkeys()
         if not self.hk.start():
             self.status.setText(self.hk.error)
+        QTimer.singleShot(1500, self._check_updates)
+
+    # ---------------------------------------------------------------- updates
+    def _show_update(self, tag: str, url: str, note: str = ""):
+        import html
+        from . import updates
+        if not updates.is_newer(tag) or self.cfg.value("updates/skip", "") == tag:
+            return self.update_row.hide()
+        self.update_url = url
+        text = f"Voicefork {tag} is out" + (f": {note}" if note else ": see what's new and download")
+        shown = text if len(text) <= 90 else text[:89].rstrip() + "\u2026"   # full note in the tooltip
+        self.update_btn.setText(shown.replace("&", "&&") + "  \u2192")      # && = a literal & on a button
+        self.update_btn.setToolTip(html.escape(note or "See what's new and download") + "<br><br>Click to open the release page.")
+        self.update_row.show()
+
+    def _skip_update(self):
+        self.cfg.setValue("updates/skip", self.cfg.value("updates/known", ""))
+        self.update_row.hide()
+
+    def _check_updates(self):
+        """Show a known newer version right away; ask GitHub at most once a day."""
+        import time
+        from . import updates
+        known = self.cfg.value("updates/known", "")
+        if known:
+            self._show_update(known, self.cfg.value("updates/url", updates.RELEASES),
+                              self.cfg.value("updates/note", ""))
+        if updates.disabled() or time.time() - float(self.cfg.value("updates/last", 0) or 0) < 86400:
+            return
+
+        def done(rel):
+            self.cfg.setValue("updates/last", time.time())
+            if rel:
+                tag, url, note = rel
+                self.cfg.setValue("updates/known", tag)
+                self.cfg.setValue("updates/url", url)
+                self.cfg.setValue("updates/note", note)
+                self._show_update(tag, url, note)
+        self.update_task = Task(updates.latest_release, self)   # its own thread: never blocks Go live
+        self.update_task.done.connect(done)
+        self.update_task.start()
 
     # ---------------------------------------------------------------- tabs
     def _preset_grid(self, on_pick, include_clean_label=None):
@@ -552,7 +612,9 @@ class MainWindow(QMainWindow):
         self.index.valueChanged.connect(self._voice_params)
         form.addRow(field("Similarity"), r)
         self.quality = Segmented(list(QUALITY), self.cfg.value("quality", "Balanced"))
-        self.quality.setToolTip("Fast = least delay. Crisp = clearest words, more delay. Applies on Start.")
+        self.quality.setToolTip("Fast = least delay. Balanced = the usual pick. Crisp = clearest words, more delay.\n"
+                                "Laptop = for PCs without an NVIDIA GPU or with a weak one: smoothest, most delay.\n"
+                                "Takes effect the next time you press Go live.")
         mode_row = QHBoxLayout()
         mode_row.addWidget(self.quality, 1)
         speed = QPushButton("Test speed")
@@ -1232,7 +1294,22 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
+def _log_without_console():
+    """Started from the shortcut (pythonw) there is no console: send errors to crash-log.txt."""
+    if sys.stderr is not None:
+        return
+    import faulthandler
+    from pathlib import Path
+    try:
+        log = open(Path(__file__).resolve().parent.parent / "crash-log.txt", "w", buffering=1, encoding="utf-8")
+    except OSError:
+        return
+    sys.stdout = sys.stderr = log
+    faulthandler.enable(log)   # even hard crashes leave a trace
+
+
 def main():
+    _log_without_console()
     os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
     app = QApplication(sys.argv)
     app.setFont(QFont("Segoe UI Variable Text", 10) if sys.platform == "win32" else QFont("Segoe UI", 10))

@@ -9,7 +9,7 @@ from voicefork.ai.training import SENTENCES, prompts
 
 @pytest.fixture(autouse=True)
 def home(tmp_path, monkeypatch):
-    monkeypatch.setenv("VOICECHANGER_HOME", str(tmp_path / "vc"))
+    monkeypatch.setenv("VOICEFORK_HOME", str(tmp_path / "vc"))
 
 
 def test_prompts_mix_sentences_and_free_talk():

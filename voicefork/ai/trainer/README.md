@@ -8,3 +8,5 @@ Changes from upstream (search for "voicefork"):
 - infer/hubert.py, train/dataset/extract_f0.py: model paths from VF_HUBERT_DIR / VF_RMVPE
 - train/train.py: tensorboard and matplotlib optional
 - train/train_index.py, extract_f0.py: sklearn / parselmouth imported only when used
+- infer/rmvpe.py: removed the upstream developer's local test block (hard-coded paths on their PC)
+- train/utils.py: removed the unused git-hash check (it ran `git rev-parse`)

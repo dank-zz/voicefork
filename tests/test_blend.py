@@ -19,7 +19,7 @@ def fake(path, value, version="v2", sr=40000, spk=109, shape=(4, 4)):
 
 @pytest.fixture(autouse=True)
 def home(tmp_path, monkeypatch):
-    monkeypatch.setenv("VOICECHANGER_HOME", str(tmp_path / "vc"))
+    monkeypatch.setenv("VOICEFORK_HOME", str(tmp_path / "vc"))
 
 
 def test_blend_mixes_weights_and_keeps_one_speaker(tmp_path):

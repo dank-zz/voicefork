@@ -3,12 +3,24 @@ rem Double-click to run Voicefork. The first run sets everything up (5-15 min wi
 setlocal
 cd /d "%~dp0"
 title Voicefork
+set "VPY=.venv\Scripts\python.exe"
 
-if exist ".venv\Scripts\python.exe" if exist ".venv\.ready" goto run
-
-echo.
-echo  Voicefork first-time setup
-echo  --------------------------
+rem .venv\.ready holds the package lists it was set up with. A newer version with
+rem different lists re-runs the install, which is quick: pip skips what's already there.
+copy /b /y requirements.txt+requirements-ai.txt "%TEMP%\voicefork-req.txt" >nul
+set "READY="
+if exist ".venv\Scripts\python.exe" if exist ".venv\.ready" set "READY=1"
+if defined READY (
+    fc /b "%TEMP%\voicefork-req.txt" ".venv\.ready" >nul && goto run
+    call :visible
+    echo.
+    echo  Voicefork updated: checking packages ...
+) else (
+    call :visible
+    echo.
+    echo  Voicefork first-time setup
+    echo  --------------------------
+)
 where py >nul 2>nul
 if %errorlevel%==0 (set "PY=py -3.12") else (set "PY=python")
 %PY% --version >nul 2>nul
@@ -21,7 +33,6 @@ if errorlevel 1 (
 )
 
 if not exist ".venv" %PY% -m venv .venv || goto fail
-set "VPY=.venv\Scripts\python.exe"
 "%VPY%" -m pip install -q --upgrade pip
 echo  Installing the app ...
 "%VPY%" -m pip install -q -r requirements.txt || goto fail
@@ -36,13 +47,25 @@ if %errorlevel%==0 (
     "%VPY%" -m pip install -q torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cpu || goto fail
     "%VPY%" -m pip install -q -r requirements-ai.txt || goto fail
 )
-echo ok> ".venv\.ready"
+copy /b /y "%TEMP%\voicefork-req.txt" ".venv\.ready" >nul
 echo  Done.
 
 :run
-rem a minimised console stays open; if the app crashes the reason ends up in crash-log.txt
-start "Voicefork (leave open)" /min cmd /c ".venv\Scripts\python.exe -m voicefork gui 2> crash-log.txt"
+rem once per install: put Voicefork on the desktop and in the Start menu
+if not exist ".venv\.shortcut" (
+    "%VPY%" -m voicefork shortcut
+    echo made> ".venv\.shortcut"
+)
+rem no console window; if the app crashes the reason ends up in crash-log.txt
+start "" ".venv\Scripts\pythonw.exe" -m voicefork gui
 exit /b 0
+
+:visible
+rem setup needs a window you can see: the desktop shortcut starts this file minimised
+if defined VF_SHOWN exit /b 0
+set "VF_SHOWN=1"
+start "Voicefork setup" cmd /c ""%~f0""
+exit
 
 :fail
 echo.

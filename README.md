@@ -20,7 +20,26 @@ for Discord, OBS and games. No account, no paywall, and it runs 100% on your own
   Works inside games.
 - **Auto speed test:** picks the best mode for your PC. Laptop mode for PCs without an NVIDIA GPU.
 - **Private by design:** your voice never leaves your computer. The only network use is
-  downloading models and voices from Hugging Face.
+  downloading models and voices from Hugging Face, and a once-a-day check for new versions. Everything it
+  touches is listed in [SECURITY.md](SECURITY.md).
+
+## Requirements
+
+| | Minimum | Recommended |
+|---|---|---|
+| **OS** | Windows 10 or 11 (64-bit) | Windows 11 |
+| **Python** | 3.12 (the launcher sets everything else up) | |
+| **Effects, soundboard, hotkeys** | Any PC | |
+| **AI voices** | NVIDIA RTX 2060 / GTX 1660, 4 GB VRAM | RTX 3060 or newer |
+| **Make my voice (training)** | NVIDIA GPU with 6 GB VRAM | 8 GB+ VRAM |
+| **Disk space** | 1 GB (effects only) | ~6 GB with AI voices |
+
+**No NVIDIA GPU?** AI voices fall back to Laptop mode on the processor. That needs a recent
+CPU (about 2020 or newer) and adds roughly half a second of delay. Older PCs can still use
+effects, the soundboard and hotkeys. The built-in speed test tells you what your PC can handle.
+
+**Known limits:** GTX 10-series cards (1060/1070/1080) aren't supported yet, and
+GTX 16-series cards may produce silent or garbled AI voices. Fixes are planned.
 
 ## Install (Windows)
 
@@ -29,7 +48,8 @@ for Discord, OBS and games. No account, no paywall, and it runs 100% on your own
 2. Download Voicefork (**Code → Download ZIP**, or the latest
    [release](https://github.com/Dank-zz/voicefork/releases)) and unzip it somewhere simple.
 3. Double-click **`Start Voicefork.bat`**. The first run installs everything (5-15 minutes; AI
-   voices are a big download). After that it opens in seconds.
+   voices are a big download) and adds a **Voicefork** shortcut to your desktop and Start menu.
+   From then on, open it like any other app. You can pin it to the taskbar from the Start menu.
 4. **For Discord/OBS/games:** the app shows a red bar until a virtual mic exists. Click it and follow
    the steps (install the free [VB-CABLE](https://vb-audio.com/Cable/), restart your PC).
    Then in Discord: *Settings → Voice & Video → Input Device → **CABLE Output***, and turn off
@@ -37,6 +57,21 @@ for Discord, OBS and games. No account, no paywall, and it runs 100% on your own
 
 **AI voices** run best on an NVIDIA GPU (RTX 20-series or newer). Without one, Voicefork uses
 Laptop mode on the processor, with more delay. Effects work on any PC.
+
+## Updating
+
+Voicefork tells you when a new version is out (a bar at the top of the window). To update:
+
+1. Download the new version and unzip it **over your current Voicefork folder**, replacing the files.
+2. Start it with `Start Voicefork.bat` as usual. If the new version needs different packages, it
+   installs them first (usually a minute); otherwise it opens straight away.
+
+Moved the Voicefork folder? Double-click `Start Voicefork.bat` once in the new place and run
+`.venv\Scripts\python -m voicefork shortcut` there to point the shortcuts at it.
+
+Your voices, clips, hotkeys and settings are kept: they live in `%USERPROFILE%\.voicefork`, not in
+the app folder. Click **Watch → Custom → Releases** on GitHub to also get an email for each release.
+To turn the update check off, set the environment variable `VOICEFORK_NO_UPDATE_CHECK=1`.
 
 <details>
 <summary>Manual install / command line</summary>

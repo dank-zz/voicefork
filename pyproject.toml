@@ -1,6 +1,6 @@
 [project]
 name = "voicefork"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Free, open-source real-time voice changer: AI voices, effects, soundboard. Runs 100% locally."
 readme = "README.md"
 license = { text = "MIT" }
@@ -22,9 +22,12 @@ voicefork = "voicefork.cli:main"
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.dynamic]
+version = { attr = "voicefork.__version__" }
+
 [tool.setuptools.packages.find]
 include = ["voicefork*"]
 namespaces = true
 
 [tool.setuptools.package-data]
-"*" = ["*.json", "LICENSE-RVC", "*.md"]
+"*" = ["*.json", "LICENSE-RVC", "*.md", "*.ico"]

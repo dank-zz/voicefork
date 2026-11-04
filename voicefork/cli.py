@@ -126,6 +126,11 @@ def main(argv=None) -> None:
         gui_main()
     sub.add_parser("gui", help="open the desktop app").set_defaults(func=cmd_gui)
 
+    def cmd_shortcut(_args):
+        from .shortcut import create
+        print(create())
+    sub.add_parser("shortcut", help="add Voicefork to the desktop and Start menu (Windows)").set_defaults(func=cmd_shortcut)
+
     from .ai.cli import register as register_ai
     register_ai(sub)
 

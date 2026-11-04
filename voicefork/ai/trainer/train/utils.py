@@ -3,7 +3,6 @@ import glob
 import json
 import logging
 import os
-import subprocess
 import sys
 import shutil
 
@@ -415,32 +414,6 @@ def get_hparams_from_file(config_path):
 
     hparams = HParams(**config)
     return hparams
-
-
-def check_git_hash(model_dir):
-    source_dir = os.path.dirname(os.path.realpath(__file__))
-    if not os.path.exists(os.path.join(source_dir, ".git")):
-        logger.warning(
-            "{} is not a git repository, therefore hash value comparison will be ignored.".format(
-                source_dir
-            )
-        )
-        return
-
-    cur_hash = subprocess.getoutput("git rev-parse HEAD")
-
-    path = os.path.join(model_dir, "githash")
-    if os.path.exists(path):
-        saved_hash = read_text(path)
-        if saved_hash != cur_hash:
-            logger.warning(
-                "git hash values are different. {}(saved) != {}(current)".format(
-                    saved_hash[:8], cur_hash[:8]
-                )
-            )
-    else:
-        with open(path, "w", encoding="utf8") as f:
-            f.write(cur_hash)
 
 
 def get_logger(model_dir, filename="train.log"):

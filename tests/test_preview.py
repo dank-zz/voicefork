@@ -11,7 +11,7 @@ from voicefork.ai import preview
 
 @pytest.fixture(autouse=True)
 def home(tmp_path, monkeypatch):
-    monkeypatch.setenv("VOICECHANGER_HOME", str(tmp_path / "vc"))
+    monkeypatch.setenv("VOICEFORK_HOME", str(tmp_path / "vc"))
 
 
 def test_fetch_pth_from_zip_takes_the_voice_not_checkpoints(tmp_path, monkeypatch):

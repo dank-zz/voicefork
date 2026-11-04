@@ -10,7 +10,7 @@ from voicefork.ai import assets, catalog
 
 @pytest.fixture(autouse=True)
 def home(tmp_path, monkeypatch):
-    monkeypatch.setenv("VOICECHANGER_HOME", str(tmp_path / "vc"))
+    monkeypatch.setenv("VOICEFORK_HOME", str(tmp_path / "vc"))
     # make _check skip the torch verification (torch may be absent here)
     monkeypatch.setitem(sys.modules, "torch", None)
     return tmp_path
