@@ -99,6 +99,9 @@ def cmd_render(args) -> None:
 
 
 def main(argv=None) -> None:
+    from . import net
+    if net.from_env():
+        net.set_offline(True)
     p = argparse.ArgumentParser(prog="voicefork", description="Open-source real-time voice changer")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("devices", help="list audio devices").set_defaults(func=cmd_devices)

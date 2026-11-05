@@ -273,6 +273,9 @@ class VoiceStore(QDialog):
 
     def _failed(self, msg):
         self.busy.hide()
+        from . import net
+        if net.is_offline() and net.is_offline_error(msg):
+            msg = net.MESSAGE
         if "No module named 'huggingface_hub'" in msg:
             msg += "\n\nInstall it: .venv\\Scripts\\python -m pip install huggingface_hub"
         self.status.setText("Failed.")

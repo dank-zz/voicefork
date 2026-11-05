@@ -297,6 +297,8 @@ class MainWindow(QMainWindow):
             old = QSettings("voicechanger", "voicechanger")
             for k in old.allKeys():
                 self.cfg.setValue(k, old.value(k))
+        from . import net
+        net.set_offline(net.from_env() or self.cfg.value("offline", False, type=bool))
         self.engine = None          # VoiceEngine or AIVoiceEngine
         self.mode = None            # "fx" or "ai"
         self.task: Task | None = None
@@ -305,6 +307,12 @@ class MainWindow(QMainWindow):
         self.voice_settings = None  # AI: shared VoiceSettings
         self.mon = None             # Monitor (hear yourself)
         self._orphans: list = []     # tasks left running after the user skipped them
+        self._wanted: dict = {}     # device name the user picked per role, kept across rescans
+        self.pending_rescan = False  # devices changed while live: rescan after Stop
+        self.dev_timer = QTimer(self)
+        self.dev_timer.setSingleShot(True)
+        self.dev_timer.setInterval(1500)    # Windows sends a burst of change events: wait for quiet
+        self.dev_timer.timeout.connect(self._devices_changed)
         self.cable_skip = False     # user chose "Go live anyway" without a virtual cable
 
         root = QWidget()
@@ -321,13 +329,10 @@ class MainWindow(QMainWindow):
         brand.setObjectName("brand")
         head.addWidget(brand)
         head.addStretch(1)
-        typ = QPushButton("Type")
-        typ.setToolTip("Type to speak in your current voice (give it a hotkey under Hotkeys)")
-        typ.clicked.connect(self._open_type)
-        head.addWidget(typ)
         keys = QPushButton("Hotkeys")
         keys.clicked.connect(self._open_hotkeys)
         head.addWidget(keys)
+        self.keys_btn = keys
         self.pill = QLabel("OFF")
         self.pill.setObjectName("pill")
         head.addWidget(self.pill)
@@ -379,10 +384,27 @@ class MainWindow(QMainWindow):
         form.addRow(field("Microphone"), self.mic)
         form.addRow(field("Output"), self.out)
         form.addRow(field("Monitor in"), self.phones)
+        for combo, role in ((self.mic, "input"), (self.out, "output"), (self.phones, "phones")):
+            combo.currentIndexChanged.connect(
+                lambda _i, c=combo, r=role: self._wanted.__setitem__(r, c.currentText()))
+        refresh = QPushButton("Refresh devices")
+        refresh.setToolTip("Plugged in a mic or headset? Voicefork also notices by itself when it isn't live.")
+        refresh.clicked.connect(lambda: self._devices_changed(user=True))
+        form.addRow(field(""), refresh)
         self.gate, gate_row = labeled_slider(-80, -20, int(self.cfg.value("gate", -50)), 1,
                                              lambda v: f"{v:.0f} dB")
         self.gate.setToolTip("Lower = lets quieter sounds through. Raise if keyboard/room noise leaks.")
         form.addRow(field("Gate level"), gate_row)
+        from . import net
+        self.offline = switch("Offline mode: block all internet connections", net.is_offline())
+        self.offline.setToolTip(
+            "Blocks every connection Voicefork could make (update check, voice downloads, searching).\n"
+            "Turn it on once your voices are downloaded. Check it yourself in Portmaster or Wireshark.")
+        if net.from_env():
+            self.offline.setEnabled(False)
+            self.offline.setToolTip("Turned on by the VOICEFORK_OFFLINE environment variable.")
+        self.offline.toggled.connect(self._set_offline)
+        form.addRow(field("Privacy"), self.offline)
         self.dev_panel.hide()
         lay.addWidget(self.dev_panel)
 
@@ -482,14 +504,11 @@ class MainWindow(QMainWindow):
         self.hk = HotkeyManager(self)
         self.hk.action.connect(self._hotkey_action)
         self.hk.ptt.connect(self._on_ptt)
-        from .type_popup import TypePopup
-        self.type_popup = TypePopup()
-        self.type_popup.setStyleSheet(STYLE)
-        self.type_popup.speak.connect(self._speak)
-        self.tts_tasks: list = []
         self._load_hotkeys()
         if not self.hk.start():
             self.status.setText(self.hk.error)
+            self.keys_btn.setText("Hotkeys \u26a0")       # visible, not just the status line
+            self.keys_btn.setToolTip(self.hk.error)
         QTimer.singleShot(1500, self._check_updates)
 
     # ---------------------------------------------------------------- updates
@@ -655,7 +674,7 @@ class MainWindow(QMainWindow):
             for i, d in enumerate(devs):
                 if d[key] > 0 and (pref is None or d["hostapi"] == pref):
                     combo.addItem(d["name"], i)
-            saved = self.cfg.value(kind)
+            saved = self._wanted.get(kind) or self.cfg.value(kind)
             pos = combo.findText(saved) if saved else -1
             if pos < 0:
                 try:
@@ -670,7 +689,7 @@ class MainWindow(QMainWindow):
             if d["max_output_channels"] > 0 and (pref is None or d["hostapi"] == pref) \
                     and "cable" not in d["name"].lower() and not is_virtual(d["name"]):
                 self.phones.addItem(d["name"], i)
-        saved = self.cfg.value("phones")
+        saved = self._wanted.get("phones") or self.cfg.value("phones")
         pos = self.phones.findText(saved) if saved else -1
         if pos < 0 and pref is not None:
             pos = self.phones.findData(sd.query_hostapis(pref)["default_output_device"])
@@ -700,11 +719,61 @@ class MainWindow(QMainWindow):
         out = short_device(self.out.currentText()) or "no output"
         mon = f"monitor: {short_device(self.phones.currentText())}" if self.mon_on.isChecked() else "monitor off"
         arrow = "\u2192"
-        self.route.setText(f"{mic}  {arrow}  {out}   \u00b7  {mon}")
+        from . import net
+        offline = "   \u00b7  offline" if net.is_offline() else ""
+        self.route.setText(f"{mic}  {arrow}  {out}   \u00b7  {mon}{offline}")
         self.route.setToolTip("Change microphone, output and monitor devices")
 
     def _toggle_devices(self):
         self.dev_panel.setVisible(not self.dev_panel.isVisible())
+        if self.dev_panel.isVisible() and not self.engine:
+            self._devices_changed()          # opening the panel always shows the current devices
+
+    # ---------------------------------------------------------------- device hot-plug
+    def nativeEvent(self, event_type, message):
+        """Windows tells every window when a device is plugged in or out (WM_DEVICECHANGE)."""
+        if sys.platform == "win32" and event_type == b"windows_generic_MSG":
+            try:
+                import ctypes.wintypes
+                msg = ctypes.wintypes.MSG.from_address(int(message))
+                if msg.message == 0x0219:            # WM_DEVICECHANGE
+                    self.dev_timer.start()
+            except Exception:  # noqa: BLE001 - never let this break the window
+                pass
+        return super().nativeEvent(event_type, message)
+
+    def _devices_changed(self, user: bool = False):
+        """Re-read the device list. Never while live: re-reading stops every open audio stream."""
+        if self.engine:
+            self.pending_rescan = True
+            if user:
+                self.status.setText("Press Stop first: devices update when you're not live")
+            return
+        self.pending_rescan = False
+        try:
+            import sounddevice as sd
+
+            from .devices import changes, rescan
+        except Exception as e:  # noqa: BLE001
+            return self.status.setText(f"Audio unavailable: {e}")
+        before = [d["name"] for d in sd.query_devices()]
+        if self.sb_local is not None:        # its stream is closed by the rescan; reopens on the next clip
+            self.sb_local.close()
+            self.sb_local = None
+        try:
+            rescan()
+        except Exception as e:  # noqa: BLE001
+            return self.status.setText(f"Couldn't re-read audio devices: {e}")
+        self._fill_devices()
+        self._update_route()
+        added, removed = changes(before, [d["name"] for d in sd.query_devices()])
+        if added or removed:
+            parts = ([f"found {short_device(added[0])}" + (f" +{len(added) - 1}" if len(added) > 1 else "")]
+                     if added else []) + ([f"lost {short_device(removed[0])}" + (
+                         f" +{len(removed) - 1}" if len(removed) > 1 else "")] if removed else [])
+            self.status.setText("Audio devices: " + ", ".join(parts))
+        elif user:
+            self.status.setText("Audio devices up to date")
 
     def _fill_voices(self):
         from .ai import assets
@@ -722,7 +791,18 @@ class MainWindow(QMainWindow):
             self.voice_list.addItem("No voices yet. Click Get voices.")
             self.voice_list.item(0).setFlags(Qt.NoItemFlags)
 
+    def _set_offline(self, on: bool):
+        from . import net
+        net.set_offline(on)
+        self.cfg.setValue("offline", on)
+        self._update_route()
+        self.status.setText("Offline mode on: Voicefork can't connect to the internet" if on
+                            else "Offline mode off")
+
     def _open_store(self):
+        from . import net
+        if net.is_offline():
+            return self._error("Get voices searches and downloads voices online.\n\n" + net.MESSAGE)
         from .voice_store import VoiceStore
         if getattr(self, "store", None) is None:
             self.store = VoiceStore(self)
@@ -806,6 +886,8 @@ class MainWindow(QMainWindow):
         self.engine, self.mode = None, None
         self._set_live(False)
         self.status.setText("off")
+        if self.pending_rescan:
+            QTimer.singleShot(300, self._devices_changed)
         self.meter.setValue(0)
         self.meter_in.setValue(0)
         self.hw.setText("")
@@ -1000,6 +1082,9 @@ class MainWindow(QMainWindow):
     def _task_failed(self, msg):
         self._set_live(bool(self.engine))
         import sys
+        from . import net
+        if net.is_offline() and net.is_offline_error(msg):
+            return self._error("This needs to download something first.\n\n" + net.MESSAGE)
         outside_venv = sys.prefix == getattr(sys, "base_prefix", sys.prefix)
         if "WinError 193" in msg or ("torch" in msg and outside_venv):
             msg = ("Voicefork was started with your computer's main Python, which has a broken PyTorch.\n\n"
@@ -1121,51 +1206,6 @@ class MainWindow(QMainWindow):
         except Exception as e:  # noqa: BLE001
             self._error(f"Could not play {name}:\n{e}")
 
-    # ---------------------------------------------------------------- type to speak
-    def _current_voice_label(self) -> str:
-        if self.audio_tab == 1:
-            item = self.voice_list.currentItem()
-            if item and item.flags() & Qt.ItemIsSelectable:
-                return item.text()
-        return "Clean" if self.fx_preset == "clean" else self.fx_preset.capitalize()
-
-    def _open_type(self):
-        from . import tts
-        why = tts.available()
-        if why:
-            return self._error(why)
-        self.type_popup.open(self._current_voice_label(),
-                             "" if self.engine else "Not live: only you will hear it. Enter to speak · Esc to close")
-
-    def _speak(self, text: str):
-        from . import tts
-        from .soundboard import _resample
-        ai_voice = None
-        if self.audio_tab == 1:
-            item = self.voice_list.currentItem()
-            if item and item.flags() & Qt.ItemIsSelectable:
-                ai_voice = item.text()
-        preset = self.fx_preset
-        gender = tts.guess_gender(ai_voice) if ai_voice else None
-
-        def work():
-            x = tts.synthesize(text, gender or "Female")
-            if ai_voice:
-                from .ai import assets, preview
-                return preview.get_previewer().convert(assets.find_voice(ai_voice)[0], x, 0)
-            return (tts.apply_effect(x, preset) if preset != "clean" else x), tts.TTS_SR
-
-        def done(res):
-            y, sr = res
-            self._play_samples("type to speak", lambda out_sr: _resample(y, sr, out_sr), toggle=False)
-
-        task = Task(work, self)
-        task.done.connect(done)
-        task.failed.connect(lambda e: self._error(f"Type to speak failed:\n{e}"))
-        task.finished.connect(lambda: self.tts_tasks.remove(task) if task in self.tts_tasks else None)
-        self.tts_tasks.append(task)
-        task.start()
-
     def _stop_clips(self):
         for m in (self.sb_mix, self.sb_local.mixer if self.sb_local else None):
             if m is not None:
@@ -1193,7 +1233,7 @@ class MainWindow(QMainWindow):
     def _load_hotkeys(self):
         from .ai import assets
         from .soundboard import list_clips
-        acts = (["tts:open"] + [f"voice:{v}" for v in assets.list_voices()] + [f"preset:{p}" for p in PRESETS]
+        acts = ([f"voice:{v}" for v in assets.list_voices()] + [f"preset:{p}" for p in PRESETS]
                 + [f"clip:{c.name}" for c in list_clips()])
         bindings = {a: self.cfg.value(f"hotkeys/{a}", "") or "" for a in acts}
         self.hk.set_bindings(bindings, self.cfg.value("hotkeys/ptt", "") or "")
@@ -1210,9 +1250,7 @@ class MainWindow(QMainWindow):
 
     def _hotkey_action(self, act: str):
         kind, name = act.split(":", 1)
-        if kind == "tts":
-            self._open_type()
-        elif kind == "clip":
+        if kind == "clip":
             self._play_clip(name)
         elif kind == "preset" and name in self.fx_buttons:
             self.fx_buttons[name].setChecked(True)
@@ -1262,9 +1300,6 @@ class MainWindow(QMainWindow):
     # ---------------------------------------------------------------- persistence
     def closeEvent(self, event):
         self.hk.stop()
-        self.type_popup.close()
-        for t in list(self.tts_tasks):
-            t.wait(5000)
         if self.sb_local is not None:
             self.sb_local.close()
         c = self.cfg

@@ -31,6 +31,11 @@ def has_virtual_cable(devices) -> bool:
     return any(d["max_output_channels"] > 0 and is_virtual(d["name"]) for d in devices)
 
 
+def changes(before: list[str], after: list[str]) -> tuple[list[str], list[str]]:
+    """(plugged in, unplugged) device names between two scans, in listing order."""
+    return [n for n in after if n not in before], [n for n in before if n not in after]
+
+
 def rescan() -> None:
     """Make PortAudio list devices again (e.g. after installing a cable) without restarting."""
     sd._terminate()

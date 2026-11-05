@@ -66,7 +66,7 @@ def test_cache_resamples_to_output_rate():
 def test_mixer_play_restarts_instead_of_stopping():
     m = sb.Mixer(48000)
     clip = np.ones(1000, np.float32)
-    m.play("tts", clip)
+    m.play("msg", clip)
     m.mix(256)
-    m.play("tts", clip)                    # a second message restarts, never cancels
-    assert m.mix(256) is not None and m.playing == {"tts"}
+    m.play("msg", clip)                    # playing the same clip again restarts it, never cancels
+    assert m.mix(256) is not None and m.playing == {"msg"}

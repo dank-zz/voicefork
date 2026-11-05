@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Ask on Discord
+    url: https://discord.gg/r2d7wHQtwB
+    about: Setup questions, "how do I…", and sharing clips. Usually the fastest way to get help.
+  - name: 🔒 Report a security problem
+    url: https://github.com/Dank-zz/voicefork/security/advisories/new
+    about: Please report security issues privately, not as a public issue.

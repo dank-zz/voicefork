@@ -112,6 +112,8 @@ def starter_installed(key: str) -> bool:
 
 def starter_files(key: str, with_index: bool | None = None) -> list[str]:
     """Repo paths of a starter voice's .pth (+ .index)."""
+    from .. import net
+    net.require_online("Getting starter voices")
     from huggingface_hub import list_repo_files
 
     if key not in STARTER:

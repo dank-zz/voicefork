@@ -59,6 +59,8 @@ def safe_name(name: str) -> str:
 
 # ---------------------------------------------------------------- search
 def search(query: str, limit: int = 40) -> list[RepoHit]:
+    from .. import net
+    net.require_online("Searching voices")
     from huggingface_hub import HfApi
 
     api = HfApi()
@@ -84,6 +86,8 @@ def search(query: str, limit: int = 40) -> list[RepoHit]:
 
 def repo_voices(repo_id: str) -> list[VoiceFile]:
     """List installable voices in a repo, pairing each .pth with its best .index."""
+    from .. import net
+    net.require_online("Listing a voice's files")
     from huggingface_hub import HfApi
 
     info = HfApi().model_info(repo_id, files_metadata=True)

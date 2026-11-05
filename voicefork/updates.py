@@ -52,7 +52,9 @@ def note_from(body: str | None) -> str:
 
 
 def disabled() -> bool:
-    return os.environ.get("VOICEFORK_NO_UPDATE_CHECK", "").strip() not in ("", "0")
+    from . import net
+    return (os.environ.get("VOICEFORK_NO_UPDATE_CHECK", "").strip() not in ("", "0")
+            or net.is_offline() or net.from_env())
 
 
 def latest_release(timeout: float = 4.0) -> tuple[str, str, str] | None:

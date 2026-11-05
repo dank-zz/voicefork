@@ -36,6 +36,11 @@ def create(desktop: bool = True, start_menu: bool = True) -> str:
         return f"Can't find {LAUNCHER.name} next to the app."
     try:
         from comtypes.client import CreateObject
+    except ImportError:
+        return ("Couldn't make the shortcut: the 'comtypes' package is missing. "
+                "Start Voicefork with Start Voicefork.bat once (it installs it), "
+                "or run:  .venv\\Scripts\\python -m pip install comtypes")
+    try:
         shell = CreateObject("WScript.Shell", dynamic=True)
         made = []
         for lnk_path in targets(desktop, start_menu):

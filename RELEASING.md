@@ -16,4 +16,4 @@
    ```
    Keep it short: the bar shows about 70 characters, the rest is in the tooltip (max 160).
    Plain text only. Without this line the bar just says the new version is out.
-6. **Publish release.** Apps on v0.1.1 or newer show the update bar within a day.
+6. **Publish release.** Apps on v0.1.2 or newer show the update bar within a day (not while they are in Offline mode).

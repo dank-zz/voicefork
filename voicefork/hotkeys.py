@@ -119,7 +119,9 @@ class HotkeyManager(QObject):
         try:
             from pynput import keyboard, mouse
         except ImportError:
-            self.error = "Hotkeys need the pynput package:  .venv\\Scripts\\python -m pip install pynput"
+            self.error = ("Hotkeys are off: the 'pynput' package is missing. Start Voicefork once with "
+                          "Start Voicefork.bat (it installs it), or run:  "
+                          ".venv\\Scripts\\python -m pip install pynput")
             return False
         self._kb = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
         self._mouse = mouse.Listener(on_click=self._on_click)

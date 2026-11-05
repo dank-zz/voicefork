@@ -80,6 +80,13 @@ class HotkeysDialog(QDialog):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(20, 16, 20, 16)
         lay.setSpacing(12)
+        if getattr(manager, "error", None):
+            warn = QLabel(manager.error)          # say it where people set keys, not just in the status line
+            warn.setWordWrap(True)
+            warn.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            warn.setStyleSheet("color: #ff5a4e; border: 1px solid #3a2321; background: #1c1312; "
+                               "border-radius: 8px; padding: 9px 12px;")
+            lay.addWidget(warn)
 
         from .gui import section, switch  # shared look
         lay.addWidget(section("Push-to-talk"))
@@ -98,8 +105,7 @@ class HotkeysDialog(QDialog):
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(6)
         r = 0
-        for title, ids in (("Type to speak", ["tts:open"]),
-                           ("AI voices", [f"voice:{v}" for v in voices]),
+        for title, ids in (("AI voices", [f"voice:{v}" for v in voices]),
                            ("Effects", [f"preset:{p}" for p in PRESETS]),
                            ("Soundboard", [f"clip:{c}" for c in clips or []])):
             grid.addWidget(section(title), r, 0, 1, 3)
@@ -111,8 +117,7 @@ class HotkeysDialog(QDialog):
                 r += 1
             for act in ids:
                 name = act.split(":", 1)[1]
-                lab = QLabel("Open typing box" if act == "tts:open"
-                             else name if act.startswith(("voice:", "clip:")) else name.capitalize())
+                lab = QLabel(name if act.startswith(("voice:", "clip:")) else name.capitalize())
                 lab.setObjectName("field")
                 clear = QPushButton("Clear")
                 clear.clicked.connect(lambda _=False, a=act: self._set(a, ""))

@@ -35,3 +35,11 @@ def test_setup_info_per_platform():
     assert setup_info("freebsd") == SETUP["linux"]
     for what, url, steps in SETUP.values():
         assert url.startswith("https://") and steps
+
+
+def test_changes_lists_plugged_and_unplugged():
+    from voicefork.devices import changes
+    before = ["Speakers (Realtek)", "CABLE Input", "Headphones (Arctis)"]
+    after = ["Speakers (Realtek)", "CABLE Input", "Microphone (Yeti X)", "Headphones (Yeti X)"]
+    assert changes(before, after) == (["Microphone (Yeti X)", "Headphones (Yeti X)"], ["Headphones (Arctis)"])
+    assert changes(after, after) == ([], [])

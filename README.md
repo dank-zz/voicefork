@@ -5,6 +5,12 @@ for Discord, OBS and games. No account, no paywall, and it runs 100% on your own
 
 <p align="center"><img src="docs/screenshot.png" width="420" alt="Voicefork, AI voice tab, live"></p>
 
+<p align="center">
+  <a href="https://discord.gg/r2d7wHQtwB"><img src="https://img.shields.io/badge/Discord-join%20the%20server-5865F2?logo=discord&logoColor=white" alt="Join the Voicefork Discord"></a>
+  <a href="https://github.com/Dank-zz/voicefork/releases/latest"><img src="https://img.shields.io/github/v/release/Dank-zz/voicefork?label=download&color=ff2a24" alt="Latest release"></a>
+</p>
+<p align="center">Help, ideas, and get your clips featured in Voicefork videos.</p>
+
 ## Features
 
 - **AI voices (RVC):** sound like a different person in real time. Free starter voices included,
@@ -15,13 +21,13 @@ for Discord, OBS and games. No account, no paywall, and it runs 100% on your own
 - **Blend** two voices into a new one that doesn't belong to anyone.
 - **Effects:** 11 classic presets (deep, robot, radio, cave, 8-bit …) that run on any PC.
 - **Soundboard:** drag in clips or record them. Others hear them in your mic, and you hear them too.
-- **Type to speak:** a hotkey pops up a box; what you type is spoken in your current voice.
 - **Hotkeys:** push-to-talk (keyboard or mouse side buttons) and one key per voice, effect or clip.
   Works inside games.
 - **Auto speed test:** picks the best mode for your PC. Laptop mode for PCs without an NVIDIA GPU.
 - **Private by design:** your voice never leaves your computer. The only network use is
-  downloading models and voices from Hugging Face, and a once-a-day check for new versions. Everything it
-  touches is listed in [SECURITY.md](SECURITY.md).
+  downloading models and voices from Hugging Face, and a once-a-day check for new versions.
+  **Offline mode** blocks even that, and [SECURITY.md](SECURITY.md) shows how to check it yourself
+  with Portmaster or Wireshark.
 
 ## Requirements
 
@@ -103,7 +109,7 @@ Voices live in `%USERPROFILE%\.voicefork\voices\<name>\` (a `.pth`, optionally a
 <summary>macOS / Linux</summary>
 
 Not officially supported yet, but the core works. Use [BlackHole](https://existential.audio/blackhole/)
-(macOS) or a PipeWire/PulseAudio null sink (Linux) instead of VB-CABLE. Type to speak needs Windows.
+(macOS) or a PipeWire/PulseAudio null sink (Linux) instead of VB-CABLE.
 </details>
 
 ## How it works
@@ -131,7 +137,7 @@ have consent. Voice files are loaded with `weights_only=True`, so a malicious mo
 - [ ] Linux and macOS builds
 - [ ] One-file installer
 
-Bug reports and pull requests are welcome; see [issues](https://github.com/Dank-zz/voicefork/issues).
+Bug reports and pull requests are welcome; see [issues](https://github.com/Dank-zz/voicefork/issues), or ask in the [Discord](https://discord.gg/r2d7wHQtwB).
 
 ## Credits
 
