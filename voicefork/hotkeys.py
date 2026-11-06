@@ -15,6 +15,16 @@ game, run Voicefork as admin too.
 """
 from __future__ import annotations
 
+# pynput imports six.moves. If that happens after PySide6 is loaded, PySide6's import
+# hook trips over six's lazy importer and the app crashes on start
+# ("'_SixMetaPathImporter' object has no attribute '_path'"). Importing pynput before
+# Qt avoids it. Any failure here is reported later by HotkeyManager.start().
+try:
+    import pynput.keyboard  # noqa: F401
+    import pynput.mouse  # noqa: F401
+except Exception:
+    pass
+
 from PySide6.QtCore import QObject, Qt, Signal
 
 MODIFIERS = ("ctrl", "alt", "shift", "cmd")
@@ -123,11 +133,19 @@ class HotkeyManager(QObject):
                           "Start Voicefork.bat (it installs it), or run:  "
                           ".venv\\Scripts\\python -m pip install pynput")
             return False
-        self._kb = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
-        self._mouse = mouse.Listener(on_click=self._on_click)
-        self._kb.daemon = self._mouse.daemon = True
-        self._kb.start()
-        self._mouse.start()
+        except Exception as e:                # a broken install must not stop the app
+            self.error = f"Hotkeys are off: pynput couldn't load ({type(e).__name__}: {e})"
+            return False
+        try:
+            self._kb = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
+            self._mouse = mouse.Listener(on_click=self._on_click)
+            self._kb.daemon = self._mouse.daemon = True
+            self._kb.start()
+            self._mouse.start()
+        except Exception as e:
+            self.stop()
+            self.error = f"Hotkeys are off: couldn't start listening ({type(e).__name__}: {e})"
+            return False
         return True
 
     def stop(self):

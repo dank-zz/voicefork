@@ -58,3 +58,20 @@ def test_paused_while_assigning():
     m.paused = True
     m._press("f5"); m._press("v")
     assert fired == [] and ptt == []
+
+
+def test_broken_pynput_does_not_crash(monkeypatch):
+    """A pynput that fails to import with something other than ImportError (seen with
+    some PySide6 + six combinations) turns hotkeys off instead of crashing the app."""
+    import builtins
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "pynput" or name.startswith("pynput."):
+            raise AttributeError("'_SixMetaPathImporter' object has no attribute '_path'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    m = HotkeyManager()
+    assert m.start() is False
+    assert "Hotkeys are off" in m.error and "AttributeError" in m.error

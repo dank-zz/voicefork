@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.3.1
+
+- Fixed a crash on start ("'_SixMetaPathImporter' object has no attribute '_path'") with newer PySide6 versions
+- If hotkeys can't start for any reason, the app now opens anyway and shows "Hotkeys ⚠" with the reason
+
 ## v0.1.3
 
 - **Offline mode:** one switch (device row → Privacy) blocks every connection Voicefork could make, including DNS, so you can prove in Portmaster or Wireshark that nothing goes out

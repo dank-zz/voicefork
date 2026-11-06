@@ -14,6 +14,16 @@ import os
 import sys
 import traceback
 
+# pynput imports six.moves. If that happens after PySide6 is loaded, PySide6's import
+# hook trips over six's lazy importer and the app crashes on start
+# ("'_SixMetaPathImporter' object has no attribute '_path'"). Importing pynput before
+# Qt avoids it. Any failure here is reported later by HotkeyManager.start().
+try:
+    import pynput.keyboard  # noqa: F401
+    import pynput.mouse  # noqa: F401
+except Exception:
+    pass
+
 from PySide6.QtCore import QSettings, Qt, QThread, QTimer, QUrl, Signal
 from PySide6.QtCore import QPointF, QRectF, QSize
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QPainter, QPen, QPixmap
