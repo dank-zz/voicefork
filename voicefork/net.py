@@ -14,6 +14,7 @@ from __future__ import annotations
 import ipaddress
 import os
 import socket
+import sys
 import urllib.request
 
 ENV = "VOICEFORK_OFFLINE"
@@ -129,6 +130,28 @@ def set_offline(on: bool) -> None:
 
 def from_env() -> bool:
     return os.environ.get(ENV, "").strip() not in ("", "0")
+
+
+def clear_persistent() -> bool:
+    """Remove a persistent user-level VOICEFORK_OFFLINE (Windows), so offline mode
+    doesn't switch itself back on at the next launch after the user turns it off.
+
+    Only touches our own variable under HKCU\\Environment. Returns True if one was
+    there and removed. No-op (returns False) off Windows or if it isn't set."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0,
+                            winreg.KEY_SET_VALUE | winreg.KEY_QUERY_VALUE) as key:
+            try:
+                winreg.QueryValueEx(key, ENV)
+            except OSError:
+                return False                   # not set persistently: nothing to do
+            winreg.DeleteValue(key, ENV)
+        return True
+    except OSError:
+        return False
 
 
 def require_online(what: str) -> None:

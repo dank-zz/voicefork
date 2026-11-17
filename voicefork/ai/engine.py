@@ -96,8 +96,22 @@ class AIVoiceEngine:
         """Run a few blocks of silence-ish audio so CUDA graphs/kernels are compiled before going live."""
         probe = 0.05 * np.sin(2 * np.pi * 220 * np.arange(self.block_frame) / self.sr).astype(np.float32)
         out = np.zeros((self.block_frame, 1), np.float32)
-        for _ in range(3):
-            self._process(probe, out)
+        try:
+            for _ in range(3):
+                self._process(probe, out)
+        except Exception as e:
+            # A CUDA-graph capture/replay can fail on tight VRAM. Rather than let
+            # going live crash, turn graphs off for the session and warm up eager.
+            from .rvc_lib.cuda_graph import disable_cuda_graph
+            disable_cuda_graph(f"prewarm failed: {e!r}")
+            if self.device.type == "cuda":
+                try:
+                    torch.cuda.synchronize(self.device)
+                except Exception:
+                    pass
+            self._reset()
+            for _ in range(3):
+                self._process(probe, out)  # graphs are off now: plain eager
         if self.device.type == "cuda":
             torch.cuda.synchronize(self.device)
         self._reset()

@@ -1,0 +1,6 @@
+# Windows batch files must stay CRLF so CMD can find labels like :visible.
+# Without this the GitHub zip ships them LF-only and setup fails with
+# "The system cannot find the batch label specified - visible".
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

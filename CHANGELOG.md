@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.1.4
+
+**Setup is more reliable**
+
+- **Fixed "The system cannot find the batch label specified - visible"** that could stop first-time setup. The launcher was stored with Unix line endings, which keeps Windows from finding labels inside a batch file. A `.gitattributes` now keeps `.bat` files as CRLF, so the download works as-is.
+- **Fixed setup failing with "Could not open requirements file: 'requirements.txt'"** when Voicefork was started from a shortcut or a synced (OneDrive) folder. The launcher now uses absolute paths for everything it installs.
+- **Python 3.10 - 3.13 are all accepted now** (3.12 still recommended), not just 3.12. If you only have the newer Python install manager with no runtime, the launcher installs Python 3.12 for you.
+
+**New: Mic fry**
+
+- A **"Mic fry" slider** on the Effects tab: one knob to compress and over-drive your mic, from clean to blown-out. Works on any PC and with any preset, Clean included.
+
+**Stability**
+
+- **Fixed a crash on some GPUs** with AI voices ("captures_underway.empty() INTERNAL ASSERT FAILED ... CUDACachingAllocator.cpp"). Voicefork now skips CUDA-graph capture when free VRAM is low, turns graphs off for the rest of the session after any capture or replay problem, and warms up without them - so it keeps running (slightly slower) instead of closing. The VRAM guard is tunable with `RVC_CUDA_GRAPH_MIN_FREE_MB`.
+
+**Offline mode**
+
+- You can now **turn Offline mode off inside the app** even when it was switched on by the `VOICEFORK_OFFLINE` environment variable. Turning it off also clears that variable so it stays off next time.
+
 ## v0.1.3.1
 
 - Fixed a crash on start ("'_SixMetaPathImporter' object has no attribute '_path'") with newer PySide6 versions

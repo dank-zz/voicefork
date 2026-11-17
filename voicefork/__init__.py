@@ -1,2 +1,2 @@
 """Open-source real-time voice changer."""
-__version__ = "0.1.3.1"
+__version__ = "0.1.4"

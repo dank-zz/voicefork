@@ -63,7 +63,8 @@ PRESETS: dict[str, tuple[str, PresetFactory]] = {
 }
 
 
-def build_chain(name: str, sr: int, gate_db: float = -50.0, gain_db: float = 0.0) -> fx.Chain:
+def build_chain(name: str, sr: int, gate_db: float = -50.0, gain_db: float = 0.0,
+                fried: float = 0.0) -> fx.Chain:
     if name not in PRESETS:
         raise KeyError(f"unknown preset {name!r}; choose from {', '.join(PRESETS)}")
     chain: list = []
@@ -71,6 +72,8 @@ def build_chain(name: str, sr: int, gate_db: float = -50.0, gain_db: float = 0.0
         chain.append(fx.Gain(gain_db))
     if gate_db is not None and gate_db > -120:
         chain.append(fx.NoiseGate(sr, threshold_db=gate_db))
+    if fried and fried > 0:          # mic conditioning: shape the raw mic before the preset
+        chain.append(fx.Fried(sr, fried))
     chain += PRESETS[name][1](sr)
     chain.append(fx.Limiter(sr, ceiling_db=-1.0))
     return fx.Chain(chain)

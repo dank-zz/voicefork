@@ -95,6 +95,30 @@ class Limiter(_BlockEnvelope):
         return x * self._smooth(target, len(x))
 
 
+class Compressor(_BlockEnvelope):
+    """Downward compressor: turns loud parts down so the mic sits at a steadier
+    level (quiet speech and shouting end up closer together). Above `threshold_db`
+    the level is pushed toward the threshold by `ratio`; `makeup_db` lifts it back."""
+
+    def __init__(self, sr, threshold_db=-24.0, ratio=4.0, makeup_db=0.0,
+                 attack_ms=8.0, release_ms=120.0):
+        super().__init__(sr, attack_ms, release_ms)
+        self.threshold_db = float(threshold_db)
+        self.slope = 1.0 - 1.0 / max(1.0, float(ratio))
+        self.makeup = F32(10 ** (makeup_db / 20))
+
+    def process(self, x):
+        n = len(x)
+        if not n:
+            return x
+        rms = float(np.sqrt(np.mean(x * x)))
+        level_db = 20 * math.log10(max(rms, 1e-7))
+        over = max(0.0, level_db - self.threshold_db)
+        # target gain = attenuate the amount over threshold, then apply makeup
+        target = (10 ** (-(over * self.slope) / 20)) * float(self.makeup)
+        return (x * self._smooth(target, n)).astype(F32)
+
+
 # --------------------------------------------------------------------------
 # Filters
 # --------------------------------------------------------------------------
@@ -297,3 +321,29 @@ class Reverb(Effect):
             delayed, w = line.run(wet)
             wet = -g * w + delayed
         return x * (1 - self.mix) + wet * self.mix
+
+
+class Fried(Effect):
+    """One knob (0..1) for how 'fried' the mic sounds: from clean, through a
+    squashed/hot broadcast sound, to a blown-out, over-driven cheap mic.
+
+    It stacks heavier compression, a narrowing band and tanh saturation as the
+    amount rises. 0 (or anything under 0.1%) is a true pass-through."""
+
+    def __init__(self, sr, amount: float = 0.5):
+        self.amount = a = max(0.0, min(1.0, float(amount)))
+        self.comp = Compressor(sr, threshold_db=-18 - 18 * a, ratio=1.5 + 10 * a,
+                               makeup_db=4 * a, attack_ms=3.0, release_ms=60.0)
+        self.hp = Biquad(sr, "highpass", 100 + 150 * a)
+        self.lp = Biquad(sr, "lowpass", max(2000.0, 10000 - 5500 * a))
+        self.drive = F32(10 ** ((3 + 20 * a) / 20))
+        self.out = F32(10 ** (-3 / 20))
+
+    def process(self, x):
+        if self.amount <= 1e-3 or not len(x):
+            return x
+        y = self.comp.process(x)
+        y = self.hp.process(y)
+        y = np.tanh(y * self.drive).astype(F32)
+        y = self.lp.process(y)
+        return (y * self.out).astype(F32)

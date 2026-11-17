@@ -34,7 +34,7 @@ for Discord, OBS and games. No account, no paywall, and it runs 100% on your own
 | | Minimum | Recommended |
 |---|---|---|
 | **OS** | Windows 10 or 11 (64-bit) | Windows 11 |
-| **Python** | 3.12 (the launcher sets everything else up) | |
+| **Python** | 3.10 - 3.13 (3.12 recommended; the launcher sets everything else up) | 3.12 |
 | **Effects, soundboard, hotkeys** | Any PC | |
 | **AI voices** | NVIDIA RTX 2060 / GTX 1660, 4 GB VRAM | RTX 3060 or newer |
 | **Make my voice (training)** | NVIDIA GPU with 6 GB VRAM | 8 GB+ VRAM |
@@ -49,8 +49,9 @@ GTX 16-series cards may produce silent or garbled AI voices. Fixes are planned.
 
 ## Install (Windows)
 
-1. Install **[Python 3.12](https://www.python.org/downloads/release/python-3128/)** and tick
-   **"Add python.exe to PATH"** in the installer.
+1. Install **[Python 3.12](https://www.python.org/downloads/release/python-3128/)** (3.10 - 3.13
+   all work) and tick **"Add python.exe to PATH"** in the installer. If you use the newer Python
+   install manager, the launcher will fetch a matching runtime for you.
 2. Download Voicefork (**Code → Download ZIP**, or the latest
    [release](https://github.com/Dank-zz/voicefork/releases)) and unzip it somewhere simple.
 3. Double-click **`Start Voicefork.bat`**. The first run installs everything (5-15 minutes; AI

@@ -21,12 +21,13 @@ from .presets import build_chain
 class VoiceEngine:
     def __init__(self, input_device: int, output_device: int, samplerate: int = 48000,
                  blocksize: int = 256, preset: str = "clean", gate_db: float = -50.0,
-                 gain_db: float = 0.0):
+                 gain_db: float = 0.0, fried: float = 0.0):
         self.input_device, self.output_device = input_device, output_device
         self.sr, self.blocksize = samplerate, blocksize
         self.gate_db, self.gain_db = gate_db, gain_db
+        self.fried = fried
         self.preset = preset
-        self._chain = build_chain(preset, samplerate, gate_db, gain_db)
+        self._chain = build_chain(preset, samplerate, gate_db, gain_db, fried)
         self._pending: queue.SimpleQueue = queue.SimpleQueue()
         self.muted = False
         # read-only stats for the UI
@@ -41,13 +42,18 @@ class VoiceEngine:
 
     # ---- control (call from any thread) ----------------------------------
     def set_preset(self, name: str) -> None:
-        chain = build_chain(name, self.sr, self.gate_db, self.gain_db)  # may raise KeyError
+        chain = build_chain(name, self.sr, self.gate_db, self.gain_db, self.fried)  # may raise KeyError
         self.preset = name
         self._pending.put(chain)
 
     def set_gate(self, gate_db: float) -> None:
         """-120 turns the gate off. Rebuilds the chain (crossfaded in the callback)."""
         self.gate_db = gate_db
+        self.set_preset(self.preset)
+
+    def set_fried(self, amount: float) -> None:
+        """0..1 'fried mic' amount. Rebuilds the chain (crossfaded in the callback)."""
+        self.fried = max(0.0, min(1.0, float(amount)))
         self.set_preset(self.preset)
 
     def toggle_mute(self) -> bool:

@@ -11,10 +11,73 @@ logger = logging.getLogger(__name__)
 
 ENV_NAME = "RVC_CUDA_GRAPH"
 MAX_CACHE_ENV = "RVC_CUDA_GRAPH_MAX_CACHE"
+# voicefork: don't attempt a graph capture when free VRAM is below this (MB). A
+# capture that runs the allocator out of memory can leave the CUDA context in a
+# state where a *later*, unrelated op trips
+#   captures_underway.empty() INTERNAL ASSERT FAILED ... CUDACachingAllocator.cpp
+# and crashes the app. Skipping the capture (run eager) avoids triggering it.
+MIN_FREE_MB_ENV = "RVC_CUDA_GRAPH_MIN_FREE_MB"
+DEFAULT_MIN_FREE_MB = 1024.0
 _probe_lock = threading.Lock()
 _probe_result = None
 # voicefork: per-thread opt-out (previews run eager next to the live engine)
 _tls = threading.local()
+# voicefork: once any capture or replay fails we stop using graphs for the whole
+# session and fall back to plain eager execution. Slightly slower, but it can't
+# trip the allocator's "captures_underway" assert again.
+_session_disabled = False
+
+
+def disable_cuda_graph(reason: str = "") -> None:
+    """Turn CUDA graphs off for the rest of this process. Idempotent."""
+    global _session_disabled
+    if not _session_disabled:
+        _session_disabled = True
+        logger.warning("CUDA Graphs disabled for this session%s",
+                       f": {reason}" if reason else "")
+
+
+def cuda_graphs_session_disabled() -> bool:
+    return _session_disabled
+
+
+def _free_mb(device) -> float:
+    """Free VRAM on `device` in MB, or +inf if it can't be read."""
+    try:
+        free, _total = torch.cuda.mem_get_info(_cuda_device(device))
+        return free / (1024.0 * 1024.0)
+    except Exception:
+        return float("inf")
+
+
+def _enough_free_vram(device) -> bool:
+    try:
+        threshold = float(os.environ.get(MIN_FREE_MB_ENV, DEFAULT_MIN_FREE_MB))
+    except (TypeError, ValueError):
+        threshold = DEFAULT_MIN_FREE_MB
+    return _free_mb(device) >= threshold
+
+
+def _is_capture_state_error(exc: BaseException) -> bool:
+    """A CUDA-graph/allocator capture-state error that can poison the context."""
+    text = str(exc)
+    return ("captures_underway" in text
+            or "capture_underway" in text
+            or "CUDACachingAllocator" in text
+            or ("CUDA graph" in text and "captur" in text))
+
+
+def _try_recover_cuda(device) -> None:
+    """Best effort: let any in-flight work finish and free cached blocks so eager
+    execution after a failed capture starts from a clean-ish state."""
+    try:
+        torch.cuda.synchronize(_cuda_device(device))
+    except Exception:
+        pass
+    try:
+        torch.cuda.empty_cache()
+    except Exception:
+        pass
 
 
 class graphs_disabled:
@@ -104,7 +167,8 @@ def configure_cuda_graph(device):
 
 def cuda_graph_enabled(device):
     return (
-        os.environ.get(ENV_NAME) == "1"
+        not _session_disabled
+        and os.environ.get(ENV_NAME) == "1"
         and _device_type(device) == "cuda"
         and torch.cuda.is_available()
     )
@@ -171,12 +235,18 @@ class _GraphCache:
 
     def run(self, key, function, inputs):
         signature = key + tuple(_tensor_signature(value) for value in inputs)
+        device = inputs[0].device
         with self.lock:
-            if signature in self.failures:
+            if _session_disabled or signature in self.failures:
                 self.fallback_count += 1
                 return function(*inputs)
             entry = self.entries.get(signature)
             if entry is None:
+                if not _enough_free_vram(device):
+                    # too little free VRAM to capture safely right now: run eager and
+                    # try again on a later block, once memory has freed up
+                    self.fallback_count += 1
+                    return function(*inputs)
                 try:
                     entry = _CapturedCall(function, inputs)
                     self.entries[signature] = entry
@@ -186,14 +256,29 @@ class _GraphCache:
                     while len(self.entries) > max_entries:
                         self.entries.popitem(last=False)
                         self.eviction_count += 1
-                except Exception:
+                except Exception as exc:
                     self.failures.add(signature)
                     self.fallback_count += 1
                     logger.exception("CUDA Graph capture failed for %s; using eager", key)
+                    if _is_capture_state_error(exc):
+                        # the context may be poisoned: stop capturing for good
+                        disable_cuda_graph(f"capture error: {exc}")
+                        self.entries.clear()
+                        _try_recover_cuda(device)
                     return function(*inputs)
             else:
                 self.entries.move_to_end(signature)
-        output = entry.replay(inputs)
+        try:
+            output = entry.replay(inputs)
+        except Exception as exc:
+            logger.exception("CUDA Graph replay failed for %s; disabling graphs", key)
+            disable_cuda_graph(f"replay error: {exc}")
+            with self.lock:
+                self.failures.add(signature)
+                self.entries.clear()
+                self.fallback_count += 1
+            _try_recover_cuda(device)
+            return function(*inputs)
         with self.lock:
             self.replay_count += 1
         return output

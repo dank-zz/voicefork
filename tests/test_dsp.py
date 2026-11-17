@@ -66,5 +66,59 @@ def test_noise_gate_silences_quiet_input():
     assert np.max(np.abs(quiet[SR // 2:])) < 1e-4
 
 
+def test_compressor_tames_loud_leaves_quiet():
+    loud = tone(200, 1.0, amp=0.5)          # ~-9 dB RMS, above the threshold
+    y = render_fx(fx.Compressor(SR, threshold_db=-24, ratio=4, attack_ms=2, release_ms=50), loud)
+    in_rms = np.sqrt(np.mean(loud[SR // 2:] ** 2))
+    out_rms = np.sqrt(np.mean(y[SR // 2:] ** 2))
+    assert np.all(np.isfinite(y))
+    assert out_rms < in_rms * 0.8          # clearly turned down
+
+    quiet = tone(200, 1.0, amp=0.01)        # ~-43 dB RMS, below the threshold
+    yq = render_fx(fx.Compressor(SR, threshold_db=-24, ratio=4), quiet)
+    q_in = np.sqrt(np.mean(quiet[SR // 2:] ** 2))
+    q_out = np.sqrt(np.mean(yq[SR // 2:] ** 2))
+    assert abs(q_out - q_in) < q_in * 0.1  # left essentially alone
+
+
+def test_fried_zero_is_passthrough():
+    x = tone(200, 0.3)
+    assert np.array_equal(fx.Fried(SR, 0.0).process(x), x)
+
+
+@pytest.mark.parametrize("amount", [0.25, 0.5, 1.0])
+def test_fried_is_finite_bounded_and_changes_signal(amount):
+    rng = np.random.default_rng(0)
+    x = tone(180, 1.0) + 0.05 * rng.standard_normal(SR).astype(np.float32)
+    y = render_fx(fx.Fried(SR, amount), x)
+    assert np.all(np.isfinite(y))
+    assert np.max(np.abs(y)) <= 1.0
+    assert len(y) == len(x)
+    assert np.sqrt(np.mean((y - x) ** 2)) > 1e-3     # it did something
+
+
+def test_fried_fits_realtime_budget():
+    chain = build_chain("clean", SR, fried=1.0)
+    block = tone(200, 256 / SR)
+    for _ in range(20):
+        chain.process(block)
+    t0 = time.perf_counter()
+    reps = 200
+    for _ in range(reps):
+        chain.process(block)
+    per_block = (time.perf_counter() - t0) / reps
+    assert per_block < 0.25 * 256 / SR, f"fried: {per_block * 1e3:.2f} ms per block"
+
+
+def test_build_chain_with_fried_is_stable():
+    rng = np.random.default_rng(1)
+    x = tone(180, 1.0) + 0.05 * rng.standard_normal(SR).astype(np.float32)
+    chain = build_chain("clean", SR, gate_db=-120, fried=0.8)
+    y = np.concatenate([chain.process(x[i:i + 256]) for i in range(0, len(x), 256)])
+    assert np.all(np.isfinite(y))
+    assert np.max(np.abs(y)) <= 1.0
+    assert np.sqrt(np.mean(y[SR // 2:] ** 2)) > 0.01   # not silent
+
+
 def render_fx(effect, x, block=256):
     return np.concatenate([effect.process(x[i:i + block]) for i in range(0, len(x), block)])

@@ -411,8 +411,9 @@ class MainWindow(QMainWindow):
             "Blocks every connection Voicefork could make (update check, voice downloads, searching).\n"
             "Turn it on once your voices are downloaded. Check it yourself in Portmaster or Wireshark.")
         if net.from_env():
-            self.offline.setEnabled(False)
-            self.offline.setToolTip("Turned on by the VOICEFORK_OFFLINE environment variable.")
+            self.offline.setToolTip(
+                "Started on by the VOICEFORK_OFFLINE environment variable.\n"
+                "You can still turn it off here — Voicefork then clears that variable so it stays off.")
         self.offline.toggled.connect(self._set_offline)
         form.addRow(field("Privacy"), self.offline)
         self.dev_panel.hide()
@@ -591,6 +592,14 @@ class MainWindow(QMainWindow):
         v.addWidget(section("Presets"))
         grid, self.fx_group = self._preset_grid(self._pick_fx)
         v.addWidget(grid)
+        form = QFormLayout()
+        self.fried, fried_row = labeled_slider(0, 100, int(self.cfg.value("fried", 0)), 100,
+                                               lambda x: f"{x * 100:.0f}%")
+        self.fried.setToolTip("How 'fried' your mic sounds: compresses and over-drives it, from\n"
+                              "clean (0) to blown-out. Works with any preset, Clean included.")
+        self.fried.valueChanged.connect(self._fried_changed)
+        form.addRow(field("Mic fry"), fried_row)
+        v.addLayout(form)
         v.addStretch(1)
         self.fx_preset = "clean"
         return w
@@ -806,8 +815,13 @@ class MainWindow(QMainWindow):
         net.set_offline(on)
         self.cfg.setValue("offline", on)
         self._update_route()
-        self.status.setText("Offline mode on: Voicefork can't connect to the internet" if on
-                            else "Offline mode off")
+        if on:
+            self.status.setText("Offline mode on: Voicefork can't connect to the internet")
+        else:
+            # if it was forced on by a persistent env var, remove it so it stays off
+            cleared = net.clear_persistent()
+            self.status.setText("Offline mode off: cleared the VOICEFORK_OFFLINE variable"
+                                if cleared else "Offline mode off")
 
     def _open_store(self):
         from . import net
@@ -911,7 +925,8 @@ class MainWindow(QMainWindow):
         if inp is None or out is None:
             return self._error("Pick a microphone and an output under the routing row.")
         try:
-            eng = VoiceEngine(inp, out, preset=self.fx_preset, gate_db=self._gate_db())
+            eng = VoiceEngine(inp, out, preset=self.fx_preset, gate_db=self._gate_db(),
+                              fried=self._fried_amount())
             eng.start()
         except Exception as e:  # noqa: BLE001
             return self._error(f"Could not open audio devices:\n{e}")
@@ -1153,6 +1168,13 @@ class MainWindow(QMainWindow):
         if self.engine and self.start.isEnabled():
             self.engine.set_gate(self._gate_db())
 
+    def _fried_amount(self) -> float:
+        return self.fried.value() / 100.0
+
+    def _fried_changed(self, *_):
+        if self.mode == "fx" and self.engine and self.start.isEnabled():
+            self.engine.set_fried(self._fried_amount())
+
     def _detach_monitor(self):
         if self.engine is not None:
             self.engine.monitor = None
@@ -1317,6 +1339,7 @@ class MainWindow(QMainWindow):
         c.setValue("output", self.out.currentText())
         c.setValue("gate", self.gate.value())
         c.setValue("gate_on", "true" if self.gate_on.isChecked() else "false")
+        c.setValue("fried", self.fried.value())
         c.setValue("monitor", "true" if self.mon_on.isChecked() else "false")
         c.setValue("phones", self.phones.currentText())
         c.setValue("pitch", self.pitch.value())
