@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.4.1
+
+- **Fixed first-time setup closing instantly on a fresh download** ("and was unexpected at this time" - a black window that flashed and vanished). The new Python 3.10 - 3.13 check broke the launcher before anything was installed, so nothing ever got set up. Setup now runs correctly on the first try. If you were stuck on this, download v0.1.4.1 and run it again.
+
 ## v0.1.4
 
 **Setup is more reliable**

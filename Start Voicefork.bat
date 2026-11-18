@@ -1,5 +1,5 @@
 @echo off
-rem Double-click to run Voicefork. The first run sets everything up (5-15 min with AI voices).
+rem Double-click to run Voicefork. First run sets everything up, 5-15 min with AI voices.
 setlocal
 cd /d "%~dp0"
 title Voicefork
@@ -7,7 +7,7 @@ set "ROOT=%~dp0"
 set "VPY=%ROOT%.venv\Scripts\python.exe"
 
 rem .venv\.ready holds the package lists it was set up with. A newer version with
-rem different lists re-runs the install, which is quick: pip skips what's already there.
+rem different lists re-runs the install, which is quick: pip skips what is already there.
 copy /b /y "%ROOT%requirements.txt"+"%ROOT%requirements-ai.txt" "%TEMP%\voicefork-req.txt" >nul
 set "READY="
 if exist "%VPY%" if exist "%ROOT%.venv\.ready" set "READY=1"
@@ -23,32 +23,27 @@ if defined READY (
     echo  --------------------------
 )
 
-rem Find a usable Python. Voicefork needs 3.10 - 3.13 (3.12 recommended). Try the py
-rem launcher's versioned shims first, then python/python3 on PATH, and confirm each one
-rem actually reports a supported 3.1x before using it.
+rem Find a usable Python. Voicefork needs 3.10 - 3.13, 3.12 recommended. Try the py
+rem launcher versioned shims first, then python and python3 on PATH, and confirm each
+rem one reports a supported 3.1x before using it. The check runs in the trypy label so
+rem the inline Python stays out of this for-block, which CMD would otherwise mis-parse.
 set "PY="
-for %%P in ("py -3.12" "py -3.13" "py -3.11" "py -3.10" "python" "python3" "py -3") do (
-    if not defined PY (
-        %%~P -c "import sys;sys.exit(0 if sys.version_info[0]==3 and 10<=sys.version_info[1]<=13 else 1)" >nul 2>nul
-        if not errorlevel 1 set "PY=%%~P"
-    )
-)
+for %%P in ("py -3.12" "py -3.13" "py -3.11" "py -3.10" "python" "python3" "py -3") do call :trypy %%~P
 
-rem New Python install manager present but no runtime installed (py -3.12 says
-rem "No runtime installed that matches 3.12")? Install 3.12 for the user, then retry.
+rem New Python install manager present but no runtime installed. Install 3.12, then retry.
 if not defined PY (
     where py >nul 2>nul && (
         echo  No Python 3.10-3.13 runtime found; installing Python 3.12 ...
         py install 3.12 >nul 2>nul
-        py -3.12 -c "import sys;sys.exit(0 if sys.version_info[0]==3 and 10<=sys.version_info[1]<=13 else 1)" >nul 2>nul && set "PY=py -3.12"
+        call :trypy py -3.12
     )
 )
 
 if not defined PY (
     echo.
-    echo  Voicefork needs Python 3.10 - 3.13 (3.12 recommended), and none was found.
+    echo  Voicefork needs Python 3.10 - 3.13 and none was found.
     echo  Get it from https://www.python.org/downloads/release/python-3128/
-    echo  and tick "Add python.exe to PATH" in the installer. Then run this again.
+    echo  and tick the Add python.exe to PATH box in the installer. Then run this again.
     pause
     exit /b 1
 )
@@ -60,11 +55,11 @@ echo  Installing the app ...
 
 where nvidia-smi >nul 2>nul
 if %errorlevel%==0 (
-    echo  NVIDIA GPU found: installing AI voices (about 3 GB, takes a while^) ...
+    echo  NVIDIA GPU found: installing AI voices, about 3 GB, takes a while ...
     "%VPY%" -m pip install -q torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128 || goto fail
     "%VPY%" -m pip install -q -r "%ROOT%requirements-ai.txt" || goto fail
 ) else (
-    echo  No NVIDIA GPU found: installing Laptop mode for AI voices (CPU^) ...
+    echo  No NVIDIA GPU found: installing Laptop mode for AI voices on CPU ...
     "%VPY%" -m pip install -q torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cpu || goto fail
     "%VPY%" -m pip install -q -r "%ROOT%requirements-ai.txt" || goto fail
 )
@@ -79,6 +74,13 @@ if not exist "%ROOT%.venv\.shortcut" (
 )
 rem no console window; if the app crashes the reason ends up in crash-log.txt
 start "" "%ROOT%.venv\Scripts\pythonw.exe" -m voicefork gui
+exit /b 0
+
+:trypy
+rem Keep the first candidate launcher that reports Python 3.10 to 3.13.
+if defined PY exit /b 0
+%* -c "import sys;sys.exit(0 if sys.version_info[:2] in ((3,10),(3,11),(3,12),(3,13)) else 1)" >nul 2>nul
+if not errorlevel 1 set "PY=%*"
 exit /b 0
 
 :visible
